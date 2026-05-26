@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🧮 Quản lý Prompt Thông minh</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .mic-button {
+      transition: all 0.3s ease;
+      padding: 0.5rem;
+      border-radius: 50%;
+    }
+    .mic-button.recording {
+      background-color: #f87171;
+      color: white;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(248, 113, 113, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
+    }
+    #voice-status {
+      text-align: center;
+      color: #6b7280;
+      margin-top: 0.5rem;
+      min-height: 1.5rem;
+    }
+    .relevance-bar {
+      height: 6px;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+    .math-tooltip {
+      position: relative;
+      cursor: help;
+    }
+    .math-tooltip:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2937;
+      color: white;
+      padding: 0.5rem;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      white-space: nowrap;
+      z-index: 10;
+    }
+    /* Login styles */
+    #login-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .login-card {
+      background: white;
+      border-radius: 1rem;
+      padding: 2rem;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      animation: slideUp 0.4s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .login-input {
+      transition: all 0.2s ease;
+    }
+    .login-input:focus {
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+      border-color: #667eea;
+    }
+    .error-message {
+      animation: shake 0.3s ease;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+    #main-content {
+      display: none;
+    }
+    #main-content.logged-in {
+      display: block;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-50 to-purple-50 min-h-screen">
+  
+  <!-- LOGIN OVERLAY -->
+  <div id="login-overlay">
+    <div class="login-card">
+      <div class="text-center mb-6">
+        <h1 class="text-2xl font-bold text-indigo-700">🔐 Đăng nhập</h1>
+        <p class="text-gray-500 text-sm mt-1">Quản lý Prompt Thông minh</p>
+      </div>
+      
+      <form id="login-form" onsubmit="handleLogin(event)">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">📧 Email</label>
+          <input 
+            type="email" 
+            id="login-email" 
+            class="login-input w-full border border-gray-300 rounded-lg p-3 focus:outline-none"
+            placeholder="nhap@email.com"
+            required
+          />
+        </div>
+        
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-1">🔑 Mật khẩu</label>
+          <input 
+            type="password" 
+            id="login-password" 
+            class="login-input w-full border border-gray-300 rounded-lg p-3 focus:outline-none"
+            placeholder="••••••••"
+            required
+          />
+        </div>
+        
+        <div id="login-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm error-message">
+          ❌ Tài khoản không tồn tại
+        </div>
+        
+        <button 
+          type="submit" 
+          class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-lg transition duration-200"
+        >
+          🚀 Đăng nhập
+        </button>
+      </form>
+      
+      <div class="mt-4 text-center text-xs text-gray-400">
+        <p>Ứng dụng bảo mật • Dữ liệu lưu trữ cục bộ</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT (Hidden until login) -->
+  <div id="main-content" class="p-4">
+    <div class="max-w-6xl mx-auto bg-white shadow-xl rounded-xl p-6">
+      <!-- Header with Logout -->
+      <div class="flex justify-between items-center mb-6 pb-4 border-b">
+        <div>
+          <h1 class="text-3xl font-bold text-indigo-700">🧮 Quản lý Prompt Thông minh</h1>
+          <p class="text-gray-500 text-sm mt-1">
+            Tích hợp <span class="math-tooltip" data-tip="Cosine similarity: cos(θ) = (A·B)/(‖A‖‖B‖)">Đại số tuyến tính</span> 
+            & <span class="math-tooltip" data-tip="Gradient descent: θ := θ - α∇J(θ)">Vi tích phân</span> để tối ưu tìm kiếm
+          </p>
+        </div>
+        <button onclick="logout()" class="text-gray-500 hover:text-red-500 transition flex items-center gap-1 text-sm">
+          🚪 Đăng xuất
+        </button>
+      </div>
+
+      <!-- Thêm Prompt -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-indigo-50 rounded-lg">
+        <div class="flex items-center gap-2">
+          <input id="title" type="text" placeholder="📝 Tiêu đề" class="border rounded p-2 w-full focus:ring-2 focus:ring-indigo-300" />
+          <button id="mic-title" class="mic-button text-gray-600 hover:text-indigo-500" title="Nhập bằng giọng nói">🎤</button>
+        </div>
+        <div class="flex items-center gap-2 md:col-span-2">
+          <input id="content" type="text" placeholder="📄 Nội dung prompt hoặc URL" class="border rounded p-2 w-full focus:ring-2 focus:ring-indigo-300" />
+          <button id="mic-content" class="mic-button text-gray-600 hover:text-indigo-500" title="Nhập bằng giọng nói">🎤</button>
+        </div>
+        <div class="flex items-center gap-2 md:col-span-3">
+          <input id="category" type="text" placeholder="🏷️ Danh mục (VD: Toán, AI, Code...)" class="border rounded p-2 w-full focus:ring-2 focus:ring-indigo-300" />
+          <button id="mic-category" class="mic-button text-gray-600 hover:text-indigo-500" title="Nhập bằng giọng nói">🎤</button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button onclick="addPrompt()" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded transition">➕ Thêm Prompt</button>
+        <button onclick="exportPrompts()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition">⬇️ Xuất JSON</button>
+        <input type="file" id="importFile" class="hidden" onchange="importPrompts(event)" />
+        <button onclick="document.getElementById('importFile').click()" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded transition">⬆️ Nhập Prompt</button>
+        <input id="deleteCategoryInput" type="text" placeholder="🗑️ Danh mục cần xoá" class="border rounded p-2" />
+        <button onclick="deleteCategory()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded transition">Xoá</button>
+      </div>
+
+      <!-- Bộ lọc & Tìm kiếm nâng cao -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-purple-50 rounded-lg">
+        <div>
+          <label class="text-sm font-medium text-gray-700">Chế độ hiển thị:</label>
+          <select id="viewMode" onchange="renderPrompts()" class="border rounded p-2 w-full mt-1">
+            <option value="grouped" selected>Theo nhóm danh mục</option>
+            <option value="all">Tất cả prompt</option>
+            <option value="ranked">🎯 Xếp hạng theo độ phù hợp</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Trọng số tìm kiếm:</label>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="text-xs">Tiêu đề</span>
+            <input type="range" id="weightTitle" min="0" max="1" step="0.1" value="0.4" class="flex-1" oninput="renderPrompts()">
+            <span class="text-xs">Nội dung</span>
+            <input type="range" id="weightContent" min="0" max="1" step="0.1" value="0.6" class="flex-1" oninput="renderPrompts()">
+          </div>
+        </div>
+        <div id="categoryFilterWrap" class="hidden md:block">
+          <label class="text-sm font-medium text-gray-700">Lọc danh mục:</label>
+          <select id="categoryFilter" onchange="renderPrompts()" class="border rounded p-2 w-full mt-1">
+            <option value="all">Tất cả</option>
+          </select>
+        </div>
+      </div>
+
+      <input id="search" oninput="renderPrompts()" type="text" 
+        placeholder="🔍 Tìm kiếm thông minh (hỗ trợ cosine similarity)..." 
+        class="w-full border-2 border-indigo-200 rounded-lg p-3 mb-4 focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition" />
+
+      <div id="voice-status" class="text-sm"></div>
+
+      <!-- Stats Panel -->
+      <div id="mathStats" class="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg text-sm hidden">
+        <div class="flex flex-wrap gap-4">
+          <span>📊 Tổng prompts: <strong id="statTotal">0</strong></span>
+          <span>🎯 Độ tương đồng trung bình: <strong id="statSimilarity">-</strong></span>
+          <span>📈 Hệ số tối ưu: <strong id="statOptimization">-</strong></span>
+        </div>
+      </div>
+
+      <div id="promptList" class="space-y-4"></div>
+      <div id="pagination" class="mt-6 flex justify-center gap-2"></div>
+      
+      <!-- Math Explanation Modal -->
+      <div id="mathModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <h3 class="text-xl font-bold text-indigo-700 mb-4">📐 Toán học đằng sau ứng dụng</h3>
+          <div class="space-y-4 text-sm text-gray-700">
+            <div>
+              <h4 class="font-semibold text-indigo-600">1. Cosine Similarity (Đại số tuyến tính)</h4>
+              <p class="ml-4 mt-1">Đo độ tương đồng giữa 2 vector từ khóa:</p>
+              <code class="block bg-gray-100 p-2 rounded mt-1">cos(θ) = (A·B) / (‖A‖ × ‖B‖)</code>
+              <p class="ml-4 mt-1">→ Giá trị càng gần 1, prompt càng phù hợp với truy vấn</p>
+            </div>
+            <div>
+              <h4 class="font-semibold text-indigo-600">2. TF-IDF Vectorization</h4>
+              <p class="ml-4 mt-1">Biểu diễn văn bản thành vector số:</p>
+              <code class="block bg-gray-100 p-2 rounded mt-1">TF-IDF(t,d,D) = TF(t,d) × log(N/DF(t))</code>
+            </div>
+            <div>
+              <h4 class="font-semibold text-indigo-600">3. Weighted Scoring (Tối ưu hóa)</h4>
+              <p class="ml-4 mt-1">Kết hợp nhiều yếu tố với trọng số:</p>
+              <code class="block bg-gray-100 p-2 rounded mt-1">Score = w₁×sim_title + w₂×sim_content + w₃×recency</code>
+            </div>
+            <div>
+              <h4 class="font-semibold text-indigo-600">4. Gradient-inspired Ranking</h4>
+              <p class="ml-4 mt-1">Điều chỉnh thứ tự dựa trên "độ dốc" độ phù hợp:</p>
+              <code class="block bg-gray-100 p-2 rounded mt-1">Δrank ∝ ∂(relevance)/∂(features)</code>
+            </div>
+          </div>
+          <button onclick="document.getElementById('mathModal').classList.add('hidden')" 
+            class="mt-6 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded-lg w-full">
+            Đóng
+          </button>
+        </div>
+      </div>
+      
+      <button onclick="document.getElementById('mathModal').classList.remove('hidden')"
+        class="fixed bottom-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-full shadow-lg transition"
+        title="Xem giải thích toán học">📐</button>
+    </div>
+  </div>
+
+  <script>
+    // ==================== LOGIN SYSTEM ====================
+    
+    const VALID_CREDENTIALS = {
+      email: "anhquan20002007@gmail.com",
+      password: "AnhQuan2007"
+    };
+
+    function handleLogin(event) {
+      event.preventDefault();
+      
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      const errorEl = document.getElementById('login-error');
+      
+      // Validate credentials
+      if (email === VALID_CREDENTIALS.email && password === VALID_CREDENTIALS.password) {
+        // Success: Hide login, show main content
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('main-content').classList.add('logged-in');
+        
+        // Save login state
+        localStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('loginEmail', email);
+        
+        // Clear form
+        document.getElementById('login-form').reset();
+        errorEl.classList.add('hidden');
+        
+        // Initialize app
+        initApp();
+      } else {
+        // Error: Show message
+        errorEl.classList.remove('hidden');
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-password').focus();
+      }
+    }
+
+    function logout() {
+      if (confirm('Bạn có chắc muốn đăng xuất?')) {
+        // Clear login state
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('loginEmail');
+        
+        // Show login, hide main content
+        document.getElementById('login-overlay').style.display = 'flex';
+        document.getElementById('main-content').classList.remove('logged-in');
+        
+        // Clear form and error
+        document.getElementById('login-form').reset();
+        document.getElementById('login-error').classList.add('hidden');
+      }
+    }
+
+    function checkLoginState() {
+      const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+      const loginOverlay = document.getElementById('login-overlay');
+      const mainContent = document.getElementById('main-content');
+      
+      if (isLoggedIn) {
+        loginOverlay.style.display = 'none';
+        mainContent.classList.add('logged-in');
+        initApp();
+      } else {
+        loginOverlay.style.display = 'flex';
+        mainContent.classList.remove('logged-in');
+      }
+    }
+
+    // ==================== TOÁN HỌC ỨNG DỤNG ====================
+    
+    class PromptVectorizer {
+      constructor() {
+        this.vocabulary = new Map();
+        this.idf = new Map();
+        this.docCount = 0;
+      }
+
+      tokenize(text) {
+        return text.toLowerCase()
+          .replace(/[^\w\s\u00C0-\u024F]/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length > 2);
+      }
+
+      buildCorpus(prompts) {
+        this.docCount = prompts.length;
+        const docFreq = new Map();
+        
+        prompts.forEach(p => {
+          const tokens = new Set(this.tokenize(p.title + ' ' + p.content));
+          tokens.forEach(token => {
+            if (!this.vocabulary.has(token)) {
+              this.vocabulary.set(token, this.vocabulary.size);
+            }
+            docFreq.set(token, (docFreq.get(token) || 0) + 1);
+          });
+        });
+
+        docFreq.forEach((df, token) => {
+          this.idf.set(token, Math.log((this.docCount + 1) / (df + 1)) + 1);
+        });
+      }
+
+      vectorize(text) {
+        const tokens = this.tokenize(text);
+        const tf = new Map();
+        tokens.forEach(t => tf.set(t, (tf.get(t) || 0) + 1));
+        
+        const maxTF = Math.max(...tf.values(), 1);
+        const vector = new Array(this.vocabulary.size).fill(0);
+        
+        tf.forEach((count, token) => {
+          const idx = this.vocabulary.get(token);
+          if (idx !== undefined) {
+            const tfNorm = count / maxTF;
+            const idf = this.idf.get(token) || 1;
+            vector[idx] = tfNorm * idf;
+          }
+        });
+        
+        return vector;
+      }
+
+      cosineSimilarity(vecA, vecB) {
+        let dot = 0, normA = 0, normB = 0;
+        for (let i = 0; i < vecA.length; i++) {
+          dot += vecA[i] * vecB[i];
+          normA += vecA[i] ** 2;
+          normB += vecB[i] ** 2;
+        }
+        if (normA === 0 || normB === 0) return 0;
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+      }
+
+      normalize(vec) {
+        const norm = Math.sqrt(vec.reduce((s, x) => s + x*x, 0));
+        return norm > 0 ? vec.map(x => x / norm) : vec;
+      }
+    }
+
+    class PromptOptimizer {
+      constructor(weights = { title: 0.4, content: 0.6, recency: 0.2 }) {
+        this.weights = weights;
+        this.learningRate = 0.01;
+      }
+
+      calculateScore(prompt, queryVectors, vectorizer, timestamp) {
+        const titleVec = vectorizer.vectorize(prompt.title);
+        const contentVec = vectorizer.vectorize(prompt.content);
+        const queryVec = queryVectors.combined;
+        
+        const simTitle = vectorizer.cosineSimilarity(titleVec, queryVec);
+        const simContent = vectorizer.cosineSimilarity(contentVec, queryVec);
+        
+        const ageHours = (Date.now() - timestamp) / 36e5;
+        const recencyFactor = Math.exp(-0.01 * ageHours);
+        
+        let score = this.weights.title * simTitle + 
+                   this.weights.content * simContent + 
+                   this.weights.recency * recencyFactor;
+        
+        return { score, simTitle, simContent, recencyFactor };
+      }
+
+      adjustWeights(feedback) {
+        const α = this.learningRate;
+        Object.keys(this.weights).forEach(key => {
+          const error = feedback.relevance - 0.5;
+          this.weights[key] = Math.max(0, Math.min(1, 
+            this.weights[key] + α * error * (feedback.features?.[key] || 1)
+          ));
+        });
+        const sum = Object.values(this.weights).reduce((a,b) => a+b, 0);
+        Object.keys(this.weights).forEach(k => this.weights[k] /= sum);
+      }
+
+      softmaxRanking(items) {
+        const maxScore = Math.max(...items.map(i => i.score));
+        const expScores = items.map(i => ({
+          ...i,
+          expScore: Math.exp(i.score - maxScore)
+        }));
+        const sumExp = expScores.reduce((s, i) => s + i.expScore, 0);
+        return expScores.map(i => ({
+          ...i,
+          probability: i.expScore / sumExp
+        })).sort((a, b) => b.probability - a.probability);
+      }
+    }
+
+    // ==================== ỨNG DỤNG CHÍNH ====================
+    
+    let prompts = JSON.parse(localStorage.getItem("prompts")) || [];
+    let editingIndex = -1;
+    const itemsPerPage = 5;
+    let currentPage = 1;
+    let recognition, isRecording = false, currentMicTarget = null;
+    
+    const vectorizer = new PromptVectorizer();
+    const optimizer = new PromptOptimizer();
+    let queryVectors = { title: null, content: null, combined: null };
+
+    function initApp() {
+      setupSpeechRecognition();
+      if (prompts.length > 0) {
+        vectorizer.buildCorpus(prompts);
+      }
+      renderPrompts();
+      setInterval(saveToStorage, 30000);
+    }
+
+    function setupSpeechRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const statusEl = document.getElementById('voice-status');
+      if (!SpeechRecognition) {
+        statusEl.textContent = '⚠️ Trình duyệt không hỗ trợ nhận diện giọng nói. Vui lòng sử dụng Chrome.';
+        ['mic-title','mic-content','mic-category'].forEach(id => 
+          document.getElementById(id).disabled = true);
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = 'vi-VN';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        isRecording = true;
+        currentMicTarget.classList.add('recording');
+        statusEl.textContent = '🎙️ Đang ghi âm...';
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+        currentMicTarget.classList.remove('recording');
+        if (statusEl.textContent === '🎙️ Đang ghi âm...') statusEl.textContent = '';
+      };
+
+      recognition.onerror = (event) => {
+        isRecording = false;
+        currentMicTarget.classList.remove('recording');
+        const errors = {
+          'no-speech': 'Không nhận được giọng nói',
+          'audio-capture': 'Không thể truy cập microphone',
+          'not-allowed': 'Chưa cấp quyền microphone'
+        };
+        statusEl.textContent = `❌ ${errors[event.error] || event.error}`;
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript.trim();
+        statusEl.textContent = `✅ "${transcript}"`;
+        const targetMap = {
+          'mic-title': 'title',
+          'mic-content': 'content', 
+          'mic-category': 'category'
+        };
+        document.getElementById(targetMap[currentMicTarget.id]).value = transcript;
+      };
+    }
+
+    function toggleMic(targetId) {
+      if (!recognition) return;
+      currentMicTarget = document.getElementById(targetId);
+      isRecording ? recognition.stop() : recognition.start();
+    }
+
+    function updateMathStats(filtered, results) {
+      document.getElementById('statTotal').textContent = prompts.length;
+      
+      if (results?.length > 0) {
+        const avgSim = results.reduce((s, r) => s + (r.simTitle + r.simContent)/2, 0) / results.length;
+        document.getElementById('statSimilarity').textContent = avgSim.toFixed(3);
+        
+        const optFactor = Object.values(optimizer.weights).map(w => w.toFixed(2)).join('/');
+        document.getElementById('statOptimization').textContent = optFactor;
+        document.getElementById('mathStats').classList.remove('hidden');
+      } else {
+        document.getElementById('mathStats').classList.add('hidden');
+      }
+    }
+
+    function renderPrompts() {
+      optimizer.weights.title = parseFloat(document.getElementById('weightTitle').value);
+      optimizer.weights.content = parseFloat(document.getElementById('weightContent').value);
+      optimizer.weights.recency = 1 - optimizer.weights.title - optimizer.weights.content;
+      
+      const viewMode = document.getElementById('viewMode')?.value || 'grouped';
+      const search = document.getElementById("search").value.toLowerCase().trim();
+      const promptList = document.getElementById("promptList");
+      
+      if (prompts.length > 0) {
+        vectorizer.buildCorpus(prompts);
+      }
+      
+      if (search) {
+        queryVectors.title = vectorizer.vectorize(search);
+        queryVectors.content = vectorizer.vectorize(search);
+        queryVectors.combined = queryVectors.title.map((v, i) => 
+          optimizer.weights.title * v + optimizer.weights.content * queryVectors.content[i]
+        );
+        queryVectors.combined = vectorizer.normalize(queryVectors.combined);
+      }
+
+      let filtered = prompts.filter(p =>
+        !search || 
+        p.title.toLowerCase().includes(search) || 
+        p.content.toLowerCase().includes(search) ||
+        p.category.toLowerCase().includes(search)
+      );
+
+      const categoryFilter = document.getElementById("categoryFilter")?.value || "all";
+      if (categoryFilter !== "all") {
+        filtered = filtered.filter(p => p.category === categoryFilter);
+      }
+
+      if (viewMode === "ranked" && search && queryVectors.combined) {
+        const scored = filtered.map(p => {
+          const { score, simTitle, simContent, recencyFactor } = 
+            optimizer.calculateScore(p, queryVectors, vectorizer, p.timestamp || Date.now());
+          return { ...p, score, simTitle, simContent, recencyFactor };
+        });
+        
+        const ranked = optimizer.softmaxRanking(scored);
+        updateMathStats(filtered, ranked);
+        renderRankedPrompts(ranked, promptList);
+        renderPagination(1);
+        return;
+      }
+
+      updateMathStats(filtered, null);
+      
+      if (viewMode === "all") {
+        promptList.innerHTML = "";
+        filtered.forEach((p, index) => {
+          const originalIdx = prompts.findIndex(x => x.title === p.title && x.content === p.content);
+          promptList.appendChild(createPromptCard(p, originalIdx));
+        });
+        renderPagination(Math.ceil(filtered.length / itemsPerPage));
+        return;
+      }
+
+      const categories = {};
+      filtered.forEach(p => {
+        if (!categories[p.category]) categories[p.category] = [];
+        categories[p.category].push(p);
+      });
+
+      const categoryKeys = Object.keys(categories);
+      const totalPages = Math.ceil(categoryKeys.length / itemsPerPage);
+      const start = (currentPage - 1) * itemsPerPage;
+      const visibleCategories = categoryKeys.slice(start, start + itemsPerPage);
+
+      promptList.innerHTML = "";
+      visibleCategories.forEach(cat => {
+        const section = document.createElement("div");
+        section.className = "mb-6";
+        section.innerHTML = `<h2 class="text-lg font-semibold text-indigo-600 mb-3 pb-2 border-b">📁 ${cat}</h2>`;
+        
+        categories[cat].forEach(p => {
+          const idx = prompts.findIndex(x => x.title === p.title && x.content === p.content);
+          section.appendChild(createPromptCard(p, idx));
+        });
+        promptList.appendChild(section);
+      });
+
+      const filterWrap = document.getElementById("categoryFilterWrap");
+      const filterSelect = document.getElementById("categoryFilter");
+      if (viewMode === "grouped") {
+        filterWrap.classList.remove("hidden");
+        if (filterSelect) {
+          filterSelect.innerHTML = '<option value="all">Tất cả</option>';
+          categoryKeys.forEach(cat => {
+            const opt = document.createElement("option");
+            opt.value = cat;
+            opt.textContent = `${cat} (${categories[cat].length})`;
+            filterSelect.appendChild(opt);
+          });
+        }
+      } else {
+        filterWrap.classList.add("hidden");
+      }
+
+      renderPagination(totalPages);
+      saveToStorage();
+    }
+
+    function createPromptCard(p, index) {
+      const div = document.createElement("div");
+      div.className = "border border-gray-200 p-4 rounded-lg shadow-sm bg-white hover:shadow-md transition";
+      
+      const contentDisplay = p.url 
+        ? `<div class="mb-2"><a href="${p.url}" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1">🔗 ${p.url}</a></div><div class="text-gray-700">${p.content}</div>`
+        : `<div class="text-gray-700">${p.content}</div>`;
+      
+      const relevanceHtml = p.score !== undefined 
+        ? `<div class="mt-3">
+            <div class="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Độ phù hợp</span>
+              <span>${(p.probability * 100).toFixed(1)}%</span>
+            </div>
+            <div class="bg-gray-200 rounded-full">
+              <div class="relevance-bar" style="width: ${p.probability * 100}%"></div>
+            </div>
+            <div class="text-xs text-gray-400 mt-1">
+              📐 sim: ${((p.simTitle + p.simContent)/2 * 100).toFixed(1)}% 
+              | ⏰ recency: ${(p.recencyFactor * 100).toFixed(1)}%
+            </div>
+          </div>` 
+        : '';
+
+      div.innerHTML = `
+        <div class="flex justify-between items-start">
+          <div class="flex-1">
+            <div class="font-semibold text-gray-800">${p.title}</div>
+            <div class="text-xs text-indigo-500 bg-indigo-50 inline-block px-2 py-0.5 rounded mt-1">
+              ${p.category}
+            </div>
+          </div>
+          <div class="text-xs text-gray-400 ml-2">
+            ${p.timestamp ? new Date(p.timestamp).toLocaleDateString('vi-VN') : ''}
+          </div>
+        </div>
+        ${contentDisplay}
+        ${relevanceHtml}
+        <div class="flex gap-2 mt-3 pt-3 border-t">
+          <button onclick="copyPrompt(${index})" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded text-sm transition">📋 Copy</button>
+          <button onclick="editPrompt(${index})" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-3 py-1 rounded text-sm transition">✏️ Edit</button>
+          <button onclick="deletePrompt(${index})" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-sm transition">🗑️ Delete</button>
+          ${p.score !== undefined ? 
+            `<button onclick="giveFeedback(${index}, 1)" class="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded text-sm transition" title="Prompt hữu ích">👍</button>
+             <button onclick="giveFeedback(${index}, 0)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm transition" title="Prompt không phù hợp">👎</button>` 
+            : ''}
+        </div>
+      `;
+      return div;
+    }
+
+    function renderRankedPrompts(ranked, container) {
+      container.innerHTML = "";
+      ranked.forEach((p, rank) => {
+        const originalIdx = prompts.findIndex(x => x.title === p.title && x.content === p.content);
+        const card = createPromptCard(p, originalIdx);
+        const badge = document.createElement("div");
+        badge.className = "absolute -top-2 -left-2 bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow";
+        badge.textContent = rank + 1;
+        card.style.position = "relative";
+        card.insertBefore(badge, card.firstChild);
+        container.appendChild(card);
+      });
+    }
+
+    function renderPagination(totalPages) {
+      const pagination = document.getElementById("pagination");
+      pagination.innerHTML = "";
+      if (totalPages <= 1) return;
+      
+      for (let i = 1; i <= totalPages; i++) {
+        const btn = document.createElement("button");
+        btn.innerText = i;
+        btn.className = `px-4 py-2 rounded-lg transition ${
+          i === currentPage 
+            ? 'bg-indigo-500 text-white shadow' 
+            : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+        }`;
+        btn.onclick = () => { currentPage = i; renderPrompts(); };
+        pagination.appendChild(btn);
+      }
+    }
+
+    function addPrompt() {
+      const title = document.getElementById("title").value.trim();
+      const content = document.getElementById("content").value.trim();
+      const category = document.getElementById("category").value.trim();
+      
+      if (!title || !content || !category) {
+        alert("⚠️ Vui lòng nhập đầy đủ tiêu đề, nội dung và danh mục.");
+        return;
+      }
+      
+      let url = null;
+      if (content.startsWith('http://') || content.startsWith('https://')) {
+        url = content;
+      }
+
+      const promptData = { 
+        title, 
+        content, 
+        category, 
+        timestamp: Date.now(),
+        ...(url && { url })
+      };
+
+      if (editingIndex >= 0) {
+        promptData.timestamp = prompts[editingIndex].timestamp || Date.now();
+        prompts[editingIndex] = promptData;
+        editingIndex = -1;
+      } else {
+        prompts.push(promptData);
+      }
+      
+      ["title", "content", "category"].forEach(id => 
+        document.getElementById(id).value = "");
+      
+      saveToStorage();
+      renderPrompts();
+    }
+
+    function deletePrompt(index) {
+      if (confirm("Bạn có chắc muốn xoá prompt này?")) {
+        prompts.splice(index, 1);
+        saveToStorage();
+        renderPrompts();
+      }
+    }
+
+    function editPrompt(index) {
+      const p = prompts[index];
+      document.getElementById("title").value = p.title;
+      document.getElementById("content").value = p.url || p.content;
+      document.getElementById("category").value = p.category;
+      editingIndex = index;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function copyPrompt(index) {
+      navigator.clipboard.writeText(prompts[index].content);
+      const btn = event.target;
+      const original = btn.textContent;
+      btn.textContent = "✅ Đã copy!";
+      btn.classList.add('bg-green-200');
+      setTimeout(() => {
+        btn.textContent = original;
+        btn.classList.remove('bg-green-200');
+      }, 1500);
+    }
+
+    function giveFeedback(index, relevance) {
+      const p = prompts[index];
+      optimizer.adjustWeights({
+        promptIndex: index,
+        relevance: relevance,
+        features: {
+          title: vectorizer.cosineSimilarity(
+            vectorizer.vectorize(p.title), 
+            queryVectors.combined
+          ),
+          content: vectorizer.cosineSimilarity(
+            vectorizer.vectorize(p.content), 
+            queryVectors.combined
+          )
+        }
+      });
+      
+      const btns = event.target.parentElement.querySelectorAll('button');
+      btns.forEach(b => b.classList.add('opacity-50', 'cursor-not-allowed'));
+      
+      setTimeout(() => {
+        renderPrompts();
+        alert(relevance ? "✅ Cảm ơn! Hệ thống đã học từ phản hồi của bạn." 
+                        : "👎 Đã ghi nhận. Hệ thống sẽ điều chỉnh xếp hạng.");
+      }, 300);
+    }
+
+    function exportPrompts() {
+      const blob = new Blob([JSON.stringify(prompts, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `prompts_math_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importPrompts(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (!Array.isArray(imported)) throw new Error("JSON phải là mảng");
+          
+          const valid = imported.filter(p => 
+            typeof p.title === "string" && 
+            typeof p.content === "string" && 
+            typeof p.category === "string"
+          );
+          
+          const existing = new Set(prompts.map(p => p.title + "|" + p.content));
+          const newOnes = valid.filter(p => !existing.has(p.title + "|" + p.content));
+          
+          prompts = [...prompts, ...newOnes.map(p => ({...p, timestamp: Date.now()}))];
+          
+          alert(`✅ Đã nhập ${newOnes.length}/${valid.length} prompt mới.`);
+          saveToStorage();
+          renderPrompts();
+        } catch (err) {
+          alert(`❌ Lỗi: ${err.message}`);
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    function deleteCategory() {
+      const cat = document.getElementById("deleteCategoryInput").value.trim();
+      if (!cat) { alert("⚠️ Vui lòng nhập danh mục cần xoá."); return; }
+      
+      const before = prompts.length;
+      prompts = prompts.filter(p => p.category !== cat);
+      const deleted = before - prompts.length;
+      
+      alert(deleted > 0 
+        ? `✅ Đã xoá ${deleted} prompt trong "${cat}".` 
+        : `ℹ️ Không tìm thấy prompt nào trong "${cat}".`);
+      
+      document.getElementById("deleteCategoryInput").value = "";
+      saveToStorage();
+      renderPrompts();
+    }
+
+    function saveToStorage() {
+      localStorage.setItem("prompts", JSON.stringify(prompts));
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      checkLoginState();
+      
+      // Setup mic buttons event listeners
+      ['mic-title','mic-content','mic-category'].forEach(id => 
+        document.getElementById(id)?.addEventListener('click', () => toggleMic(id)));
+    });
+
+    window.addEventListener('beforeunload', saveToStorage);
+  </script>
+</body>
+</html>
